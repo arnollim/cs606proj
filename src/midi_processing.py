@@ -7,148 +7,314 @@ These functions and classes are for midi processing
 Dummy code to define classes and functions from the assignment 2 script. Start with this first.
 
 '''
-import numpy as np
-import numpy.random as rnd
-import networkx as nx
-import matplotlib.pyplot as plt
-from lxml import etree as LET
-
-from evrp import *
-from pathlib import Path
-
+import os
 import sys
-sys.path.append('./ALNS')
+import copy
+from itertools import groupby
+import numpy as np
+from src.music_functions import *
 
+import pretty_midi
 
-### draw and output solution ###
-def save_output(YourName, evrp, suffix):
-    '''Draw the EVRP instance and save the solution
-    Args:
-        YourName::str
-            your name, eg. John_Doe
-        evrp::EVRP
-            an EVRP object
-        suffix::str
-            suffix of the output file, 
-            'initial' for random initialization
-            and 'solution' for the final solution
+def all_equal(iterable):
     '''
-    draw_evrp(YourName, evrp, suffix)
-    generate_output(YourName, evrp, suffix)
-
-### visualize EVRP ###
-def create_graph(evrp):
-    '''Create a directional graph from the EVRP instance
-    Args:
-        evrp::EVRP
-            an EVRP object
-    Returns:
-        g::nx.DiGraph
-            a directed graph
-    '''
-    g = nx.DiGraph(directed=True)
-    g.add_node(evrp.depot.id, pos=(evrp.depot.x, evrp.depot.y), type=evrp.depot.type)
-    for c in evrp.customers:
-        g.add_node(c.id, pos=(c.x, c.y), type=c.type)
-    for cs in evrp.CSs:
-        g.add_node(cs.id, pos=(cs.x, cs.y), type=cs.type)
-    return g
-
-def draw_evrp(YourName, evrp, suffix):
-    '''Draw the EVRP instance and the solution
-    Args:
-        YourName::str
-            your name, eg. John_Doe
-        evrp::EVRP
-            an EVRP object
-        suffix::str
-            suffix of the output file, 
-            eg. 'initial' for random initialization
-            and 'solution' for the final solution
-    '''
-    g = create_graph(evrp)
-    route = list(node.id for node in sum(evrp.route, []))
-    edges = [(route[i], route[i+1]) for i in range(len(route) - 1) if route[i] != route[i+1]]
-    g.add_edges_from(edges)
-    colors = []
-    for n in g.nodes:
-        if g.nodes[n]['type'] == 0:
-            colors.append('#0000FF')
-        elif g.nodes[n]['type'] == 1:
-            colors.append('#FF0000')
-        else:
-            colors.append('#00FF00')
-    pos = nx.get_node_attributes(g, 'pos')
-    fig, ax = plt.subplots(figsize=(24, 12))
-    nx.draw(g, pos, node_color=colors, with_labels=True, ax=ax, 
-            arrows=True, arrowstyle='-|>', arrowsize=12, 
-            connectionstyle='arc3, rad = 0.025')
-
-    plt.text(0, 6, YourName, fontsize=12)
-    plt.text(0, 3, 'Instance: {}'.format(evrp.name), fontsize=12)
-    plt.text(0, 0, 'Objective: {}'.format(evrp.objective()), fontsize=12)
-    plt.savefig('{}_{}_{}.jpg'.format(YourName, evrp.name, suffix), dpi=300, bbox_inches='tight')
+    Utility function to check that all items in list are the same. For checking array lengths for each voice.
     
-### generate output file for the solution ###
-def generate_output(YourName, evrp, suffix):
-    '''Generate output file (.txt) for the evrp solution, containing the instance name, the objective value, and the route
-    Args:
-        YourName::str
-            your name, eg. John_Doe
-        evrp::EVRP
-            an EVRP object
-        suffix::str
-            suffix of the output file,
-            eg. 'initial' for random initialization
-            and 'solution' for the final solution
-    '''
-    str_builder = ['{}\nInstance: {}\nObjective: {}\n'.format(YourName, evrp.name, evrp.objective())]
-    for idx, r in enumerate(evrp.route):
-        str_builder.append('Route {}:'.format(idx))
-        j = 0
-        for node in r:
-            if node.type == 0:
-                str_builder.append('depot {}'.format(node.id))
-            elif node.type == 1:
-                str_builder.append('customer {}'.format(node.id))
-            elif node.type == 2:
-                str_builder.append('station {} Charge ({})'.format(node.id, evrp.vehicles[idx].battery_charged[j]))
-                j += 1
-        str_builder.append('\n')
-    with open('{}_{}_{}.txt'.format(YourName, evrp.name, suffix), 'w') as f:
-        f.write('\n'.join(str_builder))
+    Parameters
+    ----------
+    iterable : list
+        List of the lengths of each voice (i.e. list of notes).
 
-### Destroy operators ###
-# You can follow the example and implement destroy_2, destroy_3, etc
-def destroy_1(current, random_state):
-    ''' Destroy operator sample (name of the function is free to change)
-    Args:
-        current::EVRP
-            an EVRP object before destroying
-        random_state::numpy.random.RandomState
-            a random state specified by the random seed
-    Returns:
-        destroyed::EVRP
-            the evrp object after destroying
-    '''
-    destroyed = current.copy()
-    # You should code here
-    ...
-    return destroyed
+    Returns
+    -------
+        True if all lengths are the same, False otherwise
 
-### Repair operators ###
-# You can follow the example and implement repair_2, repair_3, etc
-def repair_1(destroyed, random_state):
-    ''' repair operator sample (name of the function is free to change)
-    Args:
-        destroyed::EVRP
-            an EVRP object after destroying
-        random_state::numpy.random.RandomState
-            a random state specified by the random seed
-    Returns:
-        repaired::EVRP
-            the evrp object after repairing
     '''
-    # You should code here
-    ...
-    return repaired
+    g = groupby(iterable)
+    return next(g, True) and not next(g, False)
+
+def test_function(midi_file):
+    '''
+    Function to aid debugging
+    '''
+    midi_data = pretty_midi.PrettyMIDI(midi_file)
+    print('time signature: ',midi_data.time_signature_changes[1].denominator)
+    print('interval length: ',round(60000/midi_data.get_tempo_changes()[1][0]))
+    print('beat locations: ',midi_data.get_beats())
+    print('note onsets: ',midi_data.get_onsets())
+    print('note starts (in ms): ',[[round(note.start * 1000) for note in instrument.notes] for instrument in midi_data.instruments])
+    print('note starts (in beats): ',[[round(note.start/round(60/midi_data.get_tempo_changes()[1][0],3),4) for note in instrument.notes] for instrument in midi_data.instruments])
+    return
+
+def midi_to_array_quick(midi_file):
+    '''
+    Function to convert midi file to array for processing.
+    
+    Parameters
+    ----------
+    midi_file : str
+        File path of the midi file
+
+    Returns
+    -------
+    midi_array : list
+        Array of notes (int) standardised to a constant beat
+
+    '''
+    midi_data = pretty_midi.PrettyMIDI(midi_file)
+    
+    # get time interval (in microseconds)
+    
+    # confirm that there are no tempo changes in the music (i.e. tempo change only occurs once at start)
+    if len(midi_data.get_tempo_changes()[0]) > 1:
+        raise Exception(f'There are tempo changes in {midi_file}, do not use')
+    
+    # convert the tempo into a time interval (s)
+    tempo_interval = 60/midi_data.get_tempo_changes()[1][0]
+   
+    # create a set of timesteps
+    time_steps = [round(x,3) for x in midi_data.get_beats()]
+    
+    # pad the beats to the end of the song
+    while time_steps[-1] <= midi_data.get_end_time():    
+        time_steps.append(round(time_steps[-1] + tempo_interval,3))
+    
+    
+    # create midi_array as an array of notes with a constant beat
+    midi_array = []
+    
+    for instrument in midi_data.instruments:
+        # voice should have a length corresponding to the number of beat locations
+        voice = [None] * len(time_steps)
+        
+        ''' for troubleshooting
+        # notes_check = []
+        '''
+        for note in instrument.notes:
+            '''for troubleshooting
+            # notes_check.append([round(note.start,3),round(note.end,3),note.pitch-36])
+            '''
+            # check if the start of the note corresponds to a beat location
+            if round(note.start,3) in time_steps:
+                idx = time_steps.index(round(note.start,3))
+                while time_steps[idx] < round(note.end,3):
+                    voice[idx] = note.pitch - 36 # transpose to mid C = 24
+                    idx += 1
+            # note may not start on a timestep, but may last longer than a beat
+            elif (note.end - note.start) >= tempo_interval:
+                # print('this note starts mid-beat: ',(note.start,note.end,note.pitch-36))
+                idx = time_steps.index(round(note.start,3) - round(tempo_interval/2,3))
+                while time_steps[idx] < round(note.end,3):
+                    voice[idx] = note.pitch - 36 # transpose to mid C = 24
+                    idx += 1
+        
+        ''' for troubleshooting
+        print('check the notes: ',notes_check)
+        capture_check = []
+        for i in range(len(time_steps)):
+            capture_check.append((time_steps[i],voice[i]))
+        print('check what got captured: ', capture_check)
+        '''
+        
+        # add voice to midi array
+        midi_array.append(voice)
+    
+    # check that all voices have same length
+    lengths = []
+    for voice in midi_array:
+        lengths.append(len(voice))
+        
+    # print('length of each voice: ',lengths)
+    
+    if not all_equal(lengths):
+        raise Exception('Error in array output, not all voices have same length')
+    
+    # print(midi_array, min_interval)
+    
+   
+    return midi_array, tempo_interval
+
+def midi_to_array_ideal(midi_file):
+    '''
+    Function to convert midi file to array for processing.
+    
+    Parameters
+    ----------
+    midi_file : str
+        File path of the midi file
+
+    Returns
+    -------
+    midi_array : list
+        Array of notes (int) standardised to a constant beat
+
+    '''
+    midi_data = pretty_midi.PrettyMIDI(midi_file)
+    
+    # get time interval (in microseconds)
+    
+    # confirm that there are no tempo changes in the music (i.e. tempo change only occurs once at start)
+    if len(midi_data.get_tempo_changes()[0]) > 1:
+        raise Exception(f'There are tempo changes in {midi_file}, do not use')
+    
+    # convert the tempo into a time interval (s)
+    tempo_interval = 60/midi_data.get_tempo_changes()[1][0]
+   
+    # create a set of timesteps
+    time_steps = [round(x,3) for x in midi_data.get_beats()]
+    
+    # pad the beats to the end of the song
+    while time_steps[-1] <= midi_data.get_end_time():    
+        time_steps.append(round(time_steps[-1] + tempo_interval,3))
+    
+    
+    # create midi_array as an array of notes with a constant beat
+    midi_array = []
+    
+    for instrument in midi_data.instruments:
+        # voice should have a length corresponding to the number of beat locations
+        voice = [None] * len(time_steps)
+        
+        ''' for troubleshooting
+        # notes_check = []
+        '''
+        for note in instrument.notes:
+            '''for troubleshooting
+            # notes_check.append([round(note.start,3),round(note.end,3),note.pitch-36])
+            '''
+            # check if the start of the note corresponds to a beat location
+            if round(note.start,3) in time_steps:
+                idx = time_steps.index(round(note.start,3))
+                while time_steps[idx] < round(note.end,3):
+                    voice[idx] = note.pitch - 36 # transpose to mid C = 24
+                    idx += 1
+            # note may not start on a timestep, but may last longer than a beat
+            elif (note.end - note.start) >= tempo_interval:
+                # print('this note starts mid-beat: ',(note.start,note.end,note.pitch-36))
+                idx = time_steps.index(round(note.start,3) - round(tempo_interval/2,3))
+                while time_steps[idx] < round(note.end,3):
+                    voice[idx] = note.pitch - 36 # transpose to mid C = 24
+                    idx += 1
+        
+        ''' for troubleshooting
+        print('check the notes: ',notes_check)
+        capture_check = []
+        for i in range(len(time_steps)):
+            capture_check.append((time_steps[i],voice[i]))
+        print('check what got captured: ', capture_check)
+        '''
+        
+        # add voice to midi array
+        midi_array.append(voice)
+    
+    # check that all voices have same length
+    lengths = []
+    for voice in midi_array:
+        lengths.append(len(voice))
+        
+    # print('length of each voice: ',lengths)
+    
+    if not all_equal(lengths):
+        raise Exception('Error in array output, not all voices have same length')
+    
+    # print(midi_array, min_interval)
+    
+    # infer meter
+    if (midi_data.time_signature_changes[0].denominator <= 4):
+        meter = midi_data.time_signature_changes[0].numerator
+    elif (midi_data.time_signature_changes[0].numerator%3 == 0) and (midi_data.time_signature_changes[0].numerator != 3):
+        meter = midi_data.time_signature_changes[0].numerator/3
+    else:
+        meter = midi_data.time_signature_changes[0].numerator
+    
+    # infer key, tonality
+    key, tonality = infer_key_tonality(midi_array)
+    
+    # infer first onset beat
+    onset = infer_onset(midi_array)
+    
+    
+    return midi_array, tempo_interval, meter, key, tonality, onset
+
+
+def array_to_midi(midi_array, instruments, beat, dest_file_path = '../outputs/model_output.mid', held_notes = False, offset = 0):
+    '''
+    Function to convert array to midi file
+
+    Parameters
+    ----------
+    midi_array : nested list of int (0-127)
+        Array of notes (int) standardised to a constant beat. Find the note numbers mapped at: https://www.music.mcgill.ca/~ich/classes/mumt306/StandardMIDIfileformat.html#BMA1_3
+        
+    instruments : list of int (0-127)
+        Array of four program numbers of the selected instrument for each voice. Find the patch map at: https://www.music.mcgill.ca/~ich/classes/mumt306/StandardMIDIfileformat.html#BMA1_4        
+        
+    beat : int
+        An integer representing the time length of each note in microseconds
+        
+    dest_file_path : str
+        Name of output filepath and filename
+        
+    held_notes : bool
+        Whether or not to combine repeated notes into a held note
+    
+    offset : positive int
+        Number of rests to insert at the start, with each rest corresponding to 1 beat
+
+    Returns
+    -------
+        Writes the midi file to output
+
+    '''
+    # Check validity of instrument array
+    if len(instruments) != 4:
+        raise Exception('Error, length of instrument array should be 4')
+    # Check offset is positive int
+    assert isinstance(offset, int), 'Error, offset argument is not an integer'
+    assert offset >= 0, 'Error, offset argument is negative'
+    
+    # Create a PrettyMIDI object to store the compiled music, tempo in bpm converted from beat
+    midi_output = pretty_midi.PrettyMIDI()
+        
+        
+    for i in range(len(midi_array)):
+        # Create a PrettyMIDI instrument with chosen instrument
+        instrument = pretty_midi.Instrument(program=instruments[i])
+        # restart the note interval
+        time = 0
+        # Add rests at the start
+        time += beat*offset/1000
+        
+        # Iterate over note names, which will be converted to note number later
+        for j, note_number in enumerate(midi_array[i]):
+            # check if pause, i.e. note is empty
+            if note_number == None:
+                # skip a beat, extend the time
+                time += beat/1000
+            else:
+                beat_count = 1
+                if held_notes: #This is to indicate whether or not to combine repeated notes into 1 held note
+                    if j > 0 and note_number == midi_array[i][j-1]: #If current note is the same as previous note, continue, since the held note would have already been created
+                        # extend the time
+                        time += beat/1000
+                        continue
+                    else:
+                        k = j
+                        while k < len(midi_array[i])-1 and midi_array[i][k+1] == note_number: #This counts the number of beats a note is held for
+                            beat_count += 1
+                            k += 1
+                # Create a Note instance, starting at 0 and ending at beat_count beats (in s)
+                note = pretty_midi.Note(
+                    velocity=127, pitch = note_number + 36, start = time, end = time + beat*beat_count/1000)
+                # Add it to our instrument
+                instrument.notes.append(note)
+                # extend the time
+                time += beat/1000
+        # Add the instrument to the PrettyMIDI object
+        midi_output.instruments.append(instrument)
+     
+    # print('output midi onsets: ',midi_output.get_onsets())
+    # Write out the MIDI data
+    midi_output.write(dest_file_path)
+    
+    return

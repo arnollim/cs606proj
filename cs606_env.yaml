@@ -1,0 +1,25 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Mar 19 00:13:36 2022
+
+@author: Arnold
+List the packages required for installation
+
+"""
+name: harmony_gen
+channels:
+  - defaults
+dependencies:
+  - python=3.8.5=h5fd99cc_1
+  - numpy
+  - pandas
+  - os
+  - sys
+  - timeit
+  - logging
+  - random
+  - copy
+  - argparse
+  - docplex
+  - pip:
+    - matplotlib

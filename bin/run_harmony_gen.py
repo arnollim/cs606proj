@@ -3,6 +3,50 @@
 Created on Mon Feb 28 20:17:15 2022
 Edited by Gab on Thu Mar 3 19:26:00 2022
 
+[NOTES]
+
+CONVENTIONS
+
+Middle C is 24
+
+Decision variables are expressed as a dictionary
+x = {S:[s1,s2,...sj],
+     A:[a1,a2,...aj],
+     T:[t1,t2,...tj],
+     B:[b1,b2,...bj]}
+
+c = [c1,c2,...cj] #records chords at each timestamp for computation of soft constraints
+
+GIVEN DATA
+
+#List of chords (based on a 12 note scale, can convert to note integers later)
+chord_list = [[0,3,7],   #i
+              [0,4,7],   #I
+              ...
+              ...
+              ]
+
+#Voice ranges
+
+
+#Key shift
+key_shift = 0
+
+#Tonality
+tonality = 'major' or 'minor'
+
+HARD CONSTRAINTS
+
+1.  x[S,j] = sample_input[j] #melody is given, the rest of the composition must match
+2.  lb[i] <= x[i][j] <= ub[i] #each voice must be within its range, i in [S,A,T,B]
+3.  if tonality == 'major':
+        x[][0] and x[][n] must match chord I
+    elif tonality == 'minor':
+        x[][0] must match chord i and x[][n] must match chord i or I
+
+SOFT CONSTRAINTS
+1.  
+
 '''
 #Standard Imports
 import os
@@ -30,13 +74,16 @@ musical_corpus = []
 for i, title, meter, key, tonality, first_on_beat, melody in musical_work_df.itertuples():
     musical_corpus.append(MusicalWorkInput(title, meter, key, tonality, first_on_beat, [int(x) for x in melody.split(',')]))
 
+# Defining dictionary of hard and soft constraint options:
+hard_constraint_options = ['musical input', 'voice range', 'chord membership', 'first last chords',
+                           'chord repetition', 'chord bass repetition', 'adjacent bar chords', 'voice crossing', 'parallel movement',
+                          'chord spacing']
+
+soft_constraint_options = ['chord progression', 'chord repetition', 'chord bass repetition', 'leap resolution',
+                           'melodic movement', 'note repetition', 'parallel movement', 'voice overlap', 'adjacent bar chords',
+                           'chord spacing', 'distinct notes', 'voice crossing', 'voice range']
+
 # Model
 cp_model = CPModel("test", musical_corpus[0], chord_vocab)
-cp_model.define_decision_variables()
-cp_model.hard_constraint_musical_input()
-cp_model.hard_constraint_voice_ranges()
-#cp_model.hard_constraint_chord_grades() #buggy, don't run this yet
-cp_model.hard_constraint_first_last_chords()
-cp_model.hard_constraint_adjacent_bar_chords()
-cp_model.hard_constraint_voice_crossing()
+
 solution = cp_model.solve()
